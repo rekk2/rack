@@ -1,0 +1,80 @@
+body {
+    font-family: Arial, sans-serif;
+
+}
+
+.color-picker-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px; /* Adjusts space between color pickers */
+}
+
+.color-picker-text {
+    margin-left: 8px; /* Adds some space between the color box and the text */
+}
+
+
+.input-group {
+    margin-bottom: 10px; /* This adds space between each group of inputs/buttons */
+}
+
+html, body {
+    height: 100%; /* Make sure the body takes the full viewport height */
+    margin: 0; /* Reset default margin */
+    display: flex;
+	padding: 0;
+    margin: 0;
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+    flex-direction: column; /* Stack vertically */
+    background: #DBE1FF; 
+}
+#downloadButton {
+    margin-bottom: 20px; /* Replace with the id or class of your download button */
+}
+
+.content-container {
+    text-align: center; /* Center the content inside the container */
+    display: flex;
+    flex-direction: column; /* Stack children elements vertically */
+    align-items: center; /* Center children horizontally */
+    justify-content: center; /* Center children vertically if there's space */
+	padding-top: 10vh; /* Adjust this value based on other elements like headers */
+    max-width: 100vw;
+    max-height: 90vh; /* Adjust this value to leave space for headers/footers */
+    margin: 0 auto; /* Center the container */
+	margin-top: 35px;
+}
+
+#canvas {
+	background-color: #FFFFFF;
+	margin-top: 35 px;
+	max-width: 100%;
+    border: 1px solid #ccc;
+	max-height: 90vh;
+    margin-bottom: 15px; /* Add some space between the canvas and the controls */
+}
+
+@media (max-width: 768px) {
+    .content-container {
+        width: 95%;
+    }
+    
+}
+
+
+@media (max-width: 480px) {
+    .content-container {
+        width: 100%;
+    }
+    
+
+}
+
+.red-hat-display-extra-bold {
+  font-family: 'Red Hat Display', sans-serif;
+  font-weight: 900;  
+}
+
+
+

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bread Rack Designer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/@simonwep/pickr/dist/pickr.min.js"></script>
+<link href="https://unpkg.com/@simonwep/pickr/dist/themes/classic.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"> 
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="content-container">
+        <canvas id="canvas" width="1200" height="1000"></canvas>
+<label for="shelfCount">Number of Shelves:</label>
+<select id="shelfCount" name="shelfCount">
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+    <option value="6">6</option>
+    <option value="7">7</option>
+    <option value="8" selected>8</option>
+</select>
+<div class="color-picker-container">
+    <div id="colorPicker"></div>
+    <span class="color-picker-text">Inner Color</span>
+</div>
+<div class="color-picker-container">
+    <div id="outerColorPicker"></div>
+    <span class="color-picker-text">Outer Color</span>
+</div>
+
+
+<div class="input-group">
+    <label for="rectWidth">Width:</label>
+    <input type="number" id="rectWidth" value="100">
+    <label for="rectHeight">Height:</label>
+    <input type="number" id="rectHeight" value="50">
+</div>
+<div class="input-group">
+    <label for="rectText">Text:</label>
+    <input type="text" id="rectText" placeholder="Enter text here">
+    <button onclick="addCustomRectangle()">Add</button>
+    <button onclick="undoLastAction()">Delete Last</button>
+</div>
+
+<div class="input-group">
+    <button id="downloadButton" onclick="downloadImage()">Download Image</button>
+</div>
+
+</div>
+
+
+<script>
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const rectangles = [];
+let isDragging = false;
+let draggedItem = null;
+let shelves = [];
+let verticalBars = { left: 140, right: 1060 }; // initial positions for vertical bars
+const verticalBarWidth = 10;
+let currentColor = '#4564FF';
+let outerColor = '#002BFF'; 
+document.addEventListener('DOMContentLoaded', function() {
+    initializeColorPickers();
+    setupEventListeners();
+});
+function initializeColorPickers() {
+    const picker = new Pickr({
+        el: '#colorPicker',
+        theme: 'classic',
+        default: currentColor,
+        comparison: false,
+        components: {
+            preview: true,
+            hue: true,
+            interaction: {
+                hex: true,
+                input: true,
+                save: true
+            }
+        }
+    }).on('save', (color, instance) => {
+        currentColor = color.toHEXA().toString();
+        instance.hide();
+        redrawEverything(ctx, canvas); // Redraw canvas to reflect new color
+    });
+
+    const outerPicker = new Pickr({
+        el: '#outerColorPicker',
+        theme: 'classic',
+        default: outerColor,
+        comparison: false,
+        components: {
+            preview: true,
+            hue: true,
+            interaction: {
+                hex: true,
+                input: true,
+                save: true
+            }
+        }
+    }).on('save', (color, instance) => {
+        outerColor = color.toHEXA().toString();
+        instance.hide();
+        redrawEverything(ctx, canvas); // Redraw canvas to reflect new color
+    });
+}
+
+function setupEventListeners() {
+	document.getElementById('shelfCount').addEventListener('change', function(e) {
+		const numberOfShelves = e.target.value;
+		shelves = [];
+		const shelfSpacing = canvas.height / (numberOfShelves + 1);
+		for (let i = 1; i <= numberOfShelves; i++) {
+			shelves.push(shelfSpacing * i);
+		}
+		redrawEverything(ctx, canvas);
+	});
+	
+	let lastMouseX, lastMouseY; // Variables to keep track of the last mouse position
+
+	canvas.addEventListener('mousedown', function(e) {
+		const rect = canvas.getBoundingClientRect();
+		const scaleX = canvas.width / rect.width;    // Scale factor for width
+		const scaleY = canvas.height / rect.height;  // Scale factor for height
+
+		const mouseX = (e.clientX - rect.left) * scaleX; // Scaled X coordinate
+		const mouseY = (e.clientY - rect.top) * scaleY;  // Scaled Y coordinate
+
+		// Check if the mouse is over any draggable items using the scaled coordinates
+		if (Math.abs(mouseX - verticalBars.left) <= verticalBarWidth) {
+			draggedItem = 'left';
+		} else if (Math.abs(mouseX - verticalBars.right) <= verticalBarWidth) {
+			draggedItem = 'right';
+		} else {
+			const shelfIndex = shelves.findIndex(y => Math.abs(mouseY - y) <= 10);
+			if (shelfIndex !== -1) {
+				draggedItem = { type: 'shelf', index: shelfIndex };
+			} else {
+				const foundRect = rectangles.find(r => 
+					mouseX >= r.x && mouseX <= r.x + r.width &&
+					mouseY >= r.y && mouseY <= r.y + r.height
+				);
+				if (foundRect) {
+					draggedItem = foundRect;
+				}
+			}
+		}
+		// Set the lastMouseX and lastMouseY for use in mousemove
+		lastMouseX = mouseX;
+		lastMouseY = mouseY;
+
+		isDragging = true;
+		redrawEverything(ctx, canvas);
+	});
+
+
+	canvas.addEventListener('mousemove', function(e) {
+		if (!isDragging || !draggedItem) return;
+
+		const rect = canvas.getBoundingClientRect();
+		const scaleX = canvas.width / rect.width;
+		const scaleY = canvas.height / rect.height;
+
+		const mouseX = (e.clientX - rect.left) * scaleX;
+		const mouseY = (e.clientY - rect.top) * scaleY;
+
+		const dx = (mouseX - lastMouseX);
+		const dy = (mouseY - lastMouseY);
+
+		if (draggedItem === 'left' || draggedItem === 'right') {
+			const newLeftPosition = verticalBars.left + (draggedItem === 'left' ? dx : -dx);
+			const newRightPosition = verticalBars.right + (draggedItem === 'right' ? dx : -dx);
+			
+			// Check bounds to ensure bars do not cross the center and stay within canvas bounds
+			const center = canvas.width / 2;
+			if (newLeftPosition >= verticalBarWidth / 2 && newRightPosition <= canvas.width - verticalBarWidth / 2) {
+				verticalBars.left = newLeftPosition;
+				verticalBars.right = newRightPosition;
+			}
+		} else if (typeof draggedItem === 'object' && draggedItem.type === 'shelf') {
+			// Update shelf position
+			shelves[draggedItem.index] += dy;
+		} else if (typeof draggedItem === 'object') {
+			// Update rectangle position, ensuring it stays within vertical bars
+			draggedItem.x = Math.max(verticalBars.left + verticalBarWidth, Math.min(draggedItem.x + dx, verticalBars.right - draggedItem.width - verticalBarWidth));
+			draggedItem.y = Math.max(0, Math.min(draggedItem.y + dy, canvas.height - draggedItem.height));
+		}
+
+		lastMouseX = mouseX;
+		lastMouseY = mouseY;
+		redrawEverything(ctx, canvas);
+	});
+
+	canvas.addEventListener('mouseup', function() {
+		isDragging = false;
+		draggedItem = null;
+		redrawEverything(ctx, canvas);
+	});
+}
+function undoLastAction() {
+    if (rectangles.length > 0) {
+        rectangles.pop();  
+        redrawEverything(ctx, canvas);
+    } else {
+        alert("No more actions to undo!");
+    }
+}
+
+function addCustomRectangle() {
+    const width = parseInt(document.getElementById('rectWidth').value, 10);
+    const height = parseInt(document.getElementById('rectHeight').value, 10);
+    const text = document.getElementById('rectText').value;  // Get the user input text
+    if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+        const xPosition = 50;  
+        const yPosition = 50; 
+        rectangles.push({
+            x: xPosition,
+            y: yPosition,
+            width: width,
+            height: height,
+            color: currentColor,
+			outerColor: outerColor,
+            text: text  // Include the text in the rectangle object
+        });
+        redrawEverything(ctx, canvas);
+    } else {
+        alert('Width and height must be valid numbers greater than 0');
+    }
+}
+
+function drawVerticalBars(ctx, canvas) {
+    const totalBarWidth = verticalBarWidth + 2; // 10px total width including black outlines
+    [verticalBars.left, verticalBars.right].forEach(x => {
+        // Draw the black outline
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x - totalBarWidth / 2, 0, totalBarWidth, canvas.height);
+        // Draw the grey core
+        ctx.fillStyle = '#5E5E5E';
+        ctx.fillRect(x - verticalBarWidth / 2, 0, verticalBarWidth, canvas.height);
+    });
+}
+
+function drawShelves(ctx, canvas) {
+    shelves.forEach(y => {
+        // Draw grey shelf with black outline
+        ctx.fillStyle = '#000000'; // Black outline color
+        ctx.fillRect(verticalBars.left - 1, y - 5, verticalBars.right - verticalBars.left + 2, 11); // 9px grey core + 1px black outline on each side
+
+        // Draw grey shelf core
+        ctx.fillStyle = '#5E5E5E'; // Grey core color
+        ctx.fillRect(verticalBars.left, y - 4, verticalBars.right - verticalBars.left, 9); // 9px grey core
+    });
+}
+
+function drawRectangles(ctx, canvas) {
+    const borderWidth = 12; // Set the border width for the outer border
+    const innerBorderWidth = borderWidth * 0.6; // Set the width for the inner border
+    const outerBorderWidth = borderWidth * 0.4; // Set the width for the outer border
+
+    rectangles.forEach(rect => {
+        // Draw the outer rectangle
+        ctx.beginPath();
+        ctx.rect(rect.x, rect.y, rect.width, rect.height);
+        ctx.lineWidth = borderWidth;
+        ctx.strokeStyle = rect.outerColor;
+        ctx.stroke();
+		
+		// Set the maximum height for the text
+        const maxTextHeight = rect.height - 10;
+		
+		// Calculate the font size to fit the width and height
+        const fontSize = getFontSizeToFit(rect.text, rect.width - 12, maxTextHeight, ctx); // 12 pixels padding
+		
+        // Draw the inner rectangle
+        ctx.beginPath();
+        ctx.rect(rect.x + outerBorderWidth, rect.y + outerBorderWidth, rect.width - 2 * outerBorderWidth, rect.height - 2 * outerBorderWidth);
+        ctx.lineWidth = innerBorderWidth;
+        ctx.strokeStyle = rect.color;
+        ctx.stroke();
+
+		// Draw text
+		ctx.font = `900 ${fontSize}px 'Red Hat Display', sans-serif`;
+        ctx.fillStyle = 'black'; // Set text color to black
+        ctx.textAlign = "center"; // Align text horizontally
+        ctx.textBaseline = "middle"; // Align text vertically
+		
+        // Calculate position for text to be centered
+        const textX = rect.x + rect.width / 2;
+		// Adjust the textY position slightly down if needed
+        const textYOffset = fontSize * 0.06; // This is an adjustment value that you can tweak
+        const textY = rect.y + rect.height / 2 + textYOffset;
+
+        // Adjust fontSize if text is wider than rectangle width
+        let textWidth = ctx.measureText(rect.text).width;
+        let currentFontSize = fontSize;
+        while (textWidth > rect.width - (borderWidth * 2) && currentFontSize > 0) {
+            ctx.font = `${--currentFontSize}px Arial`;
+            textWidth = ctx.measureText(rect.text).width;
+        }
+
+        ctx.fillText(rect.text, textX, textY); // Fill text on the canvas
+    });
+}
+
+
+
+function getFontSizeToFit(text, rectWidth, rectHeight, ctx) {
+    let fontSize = Math.min(rectWidth / (text.length / 2), rectHeight); // Initial guess
+    ctx.font = `900 ${fontSize}px 'Red Hat Display', sans-serif`; // Start with bold
+
+    // Reduce the font size until the text fits the rectangle
+    while ((ctx.measureText(text).width > rectWidth || fontSize > rectHeight) && fontSize > 20) { // Don't go below 20px for bold
+        fontSize -= 1;
+        ctx.font = `900 ${fontSize}px 'Red Hat Display', sans-serif`;
+    }
+
+    // If the width fits but the height doesn't, try reducing based on height
+    if (ctx.measureText(text).width <= rectWidth && fontSize > rectHeight) {
+        while (fontSize > rectHeight && fontSize > 20) { // Don't go below 20px for bold
+            fontSize -= 1;
+            ctx.font = `900 ${fontSize}px 'Red Hat Display', sans-serif`;
+        }
+    }
+
+    return fontSize; // Return the calculated font size
+}
+
+function downloadImage() {
+
+    var highResCanvas = document.createElement('canvas');
+    var highResCtx = highResCanvas.getContext('2d');
+    var scaleFactor = 4000 / canvas.width;
+    highResCanvas.width = 4000; 
+    highResCanvas.height = canvas.height * scaleFactor;
+
+    highResCtx.scale(scaleFactor, scaleFactor);
+
+    // Draw on highResCanvas
+    redrawEverything(highResCtx, highResCanvas);  
+
+    // Convert to a data URL and download
+    var highResDataURL = highResCanvas.toDataURL('image/png');
+    fetch('/download', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({canvasData: highResDataURL})
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'downloaded_image.png';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => console.error('Error downloading the image:', error));
+}
+
+function resizeCanvas() {
+    var headerHeight = document.querySelector('header').offsetHeight; // Get the header height if you have one
+    var maxHeight = window.innerHeight - headerHeight - 20; // Subtract header height and any additional margin you need at the bottom
+    var canvas = document.getElementById('canvas');
+
+    // Calculate aspect ratio based on the container width
+    var aspectRatio = 4 / 3;
+    var newWidth = canvas.parentElement.offsetWidth; // Get the width of the container of the canvas
+    var newHeight = newWidth / aspectRatio;
+
+    // If the new height is greater than the allowed max height, adjust it
+    if (newHeight > maxHeight) {
+        newHeight = maxHeight;
+        newWidth = newHeight * aspectRatio;
+    }
+
+    // Update canvas size
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+}
+
+window.addEventListener('resize', resizeCanvas);
+document.addEventListener('DOMContentLoaded', resizeCanvas);
+
+
+
+function redrawEverything(ctx, canvas) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawShelves(ctx, canvas);
+    drawVerticalBars(ctx, canvas);
+    drawRectangles(ctx, canvas);
+}
+
+// This listener is set after the functions have been defined
+document.getElementById('downloadImage').addEventListener('click', function() {
+  downloadImage();
+});
+
+document.getElementById('shelfCount');
+//setupCanvasForPrinting(ctx, canvas);
+redrawEverything(ctx, canvas);
+</script>
+</body>
+</html>
