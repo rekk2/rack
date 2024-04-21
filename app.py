@@ -32,5 +32,6 @@ def create_image(data):
     image = Image.new('RGB', (1000, 1000), 'white')
     return image
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+#Uncomment for local deployment
+#if __name__ == '__main__':
+#   app.run(debug=True, port=5001)
